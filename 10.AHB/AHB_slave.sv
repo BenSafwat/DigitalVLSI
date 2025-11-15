@@ -106,14 +106,14 @@ module AHB_slave (
     end
 
     //local registers
-    logic [31:0] ADDR_reg;
+    logic [31:0] wADDR_reg, rADDR_reg;
     H_SIZE_t SIZE_reg;
     logic WRITE_reg;
 
 
     //check if the address is within range
     logic addr_valid;
-    assign addr_valid = (ADDR_reg[9:2] <= 255);  // 256 words
+    assign addr_valid = (H_ADDR[9:2] <= 255);  // 256 words
 
     logic [3:0] inc_amount;
     always_comb begin
@@ -128,7 +128,7 @@ module AHB_slave (
     always_ff @(posedge H_CLK or negedge H_RESETn) begin
         if(!H_RESETn)begin
             wait_cntr   <= 0;
-            ADDR_reg    <= 0;
+            wADDR_reg    <= 0;
             WRITE_reg   <= 0;
             SIZE_reg    <= WORD;
             
@@ -139,8 +139,8 @@ module AHB_slave (
 
                 S_IDLE: begin
                     
-                    if(H_SEL && H_READY_IN)begin
-                        ADDR_reg    <= H_ADDR;
+                    if(H_SEL && H_READY_IN && H_TRANS != IDLE && H_TRANS != BUSY)begin
+                        wADDR_reg    <= H_ADDR;
                         WRITE_reg   <= H_WRITE;
                         SIZE_reg    <= H_SIZE;
                     end
@@ -164,24 +164,24 @@ module AHB_slave (
                     //#################################################
                     if (H_TRANS == NONSEQ) begin
                         //for the first NONSEQ just save the address
-                        ADDR_reg    <= H_ADDR;
+                        wADDR_reg    <= H_ADDR;
                         WRITE_reg   <= H_WRITE;
                         SIZE_reg    <= H_SIZE;
 
+                        if(H_BURST != SINGLE) rADDR_reg <= H_ADDR + inc_amount;
+                        else rADDR_reg <= H_ADDR;    //you don't actually use it because you use H_ADDR it self
+
                         H_RESPONSE <= 1'b0;
                     end else if (H_TRANS == SEQ) begin
-                        // Continue burst
-                        case(H_BURST)
-                            //If H_BURST=SINGLE while H_TRANS = SEQ is ILLEGAL,
-                            //so ignor the new address and keep the old one
-                            SINGLE: ADDR_reg <= ADDR_reg;
-                            default: ADDR_reg <= ADDR_reg + inc_amount; // INCR and INCR4/8/16
-                        endcase
+                        // SEQ mean you are in a burst
+                        if(WRITE_reg) wADDR_reg <= wADDR_reg + inc_amount; // INCR and INCR4/8/16
+                        if(!H_WRITE) rADDR_reg <= rADDR_reg + inc_amount;
+
                     end else begin
                         //This brach shouldn't be reachable for now
                         //IDLE & BUSY Ignor the incoming address
                         //Implementing BUSY next
-                        ADDR_reg <= ADDR_reg; 
+                        wADDR_reg <= wADDR_reg; 
                     end
 
                     //#####################################################
@@ -193,33 +193,38 @@ module AHB_slave (
                             //address from cycle:1 and data from current cycle
                             case(SIZE_reg)
                                 BYTE: begin
-                                    case (ADDR_reg[1:0])
-                                        2'b00: mem[ADDR_reg[9:2]][7:0]   <= H_WDATA[7:0];
-                                        2'b01: mem[ADDR_reg[9:2]][15:8]  <= H_WDATA[7:0];
-                                        2'b10: mem[ADDR_reg[9:2]][23:16] <= H_WDATA[7:0];
-                                        2'b11: mem[ADDR_reg[9:2]][31:24] <= H_WDATA[7:0];
-                                        default: mem[ADDR_reg[9:2]][7:0]   <= H_WDATA[7:0];
+                                    case (wADDR_reg[1:0])
+                                        2'b00: mem[wADDR_reg[9:2]][7:0]   <= H_WDATA[7:0];
+                                        2'b01: mem[wADDR_reg[9:2]][15:8]  <= H_WDATA[7:0];
+                                        2'b10: mem[wADDR_reg[9:2]][23:16] <= H_WDATA[7:0];
+                                        2'b11: mem[wADDR_reg[9:2]][31:24] <= H_WDATA[7:0];
+                                        default: mem[wADDR_reg[9:2]][7:0]   <= H_WDATA[7:0];
                                     endcase
                                 end
 
                                 HALFWORD: begin
-                                    case (ADDR_reg[1:0])
-                                        2'b00: mem[ADDR_reg[9:2]][15:0]  <= H_WDATA[15:0];
-                                        2'b10: mem[ADDR_reg[9:2]][31:16] <= H_WDATA[15:0];
-                                        default: mem[ADDR_reg[9:2]][15:0]  <= H_WDATA[15:0];
+                                    case (wADDR_reg[1:0])
+                                        2'b00: mem[wADDR_reg[9:2]][15:0]  <= H_WDATA[15:0];
+                                        2'b10: mem[wADDR_reg[9:2]][31:16] <= H_WDATA[15:0];
+                                        default: mem[wADDR_reg[9:2]][15:0]  <= H_WDATA[15:0];
                                     endcase
                                 end
 
-                                WORD : mem[ADDR_reg[9:2]] <= H_WDATA;
-                                default: mem[ADDR_reg[9:2]] <= H_WDATA;
+                                WORD : mem[wADDR_reg[9:2]] <= H_WDATA;
+                                default: mem[wADDR_reg[9:2]] <= H_WDATA;
                             endcase
-                        end else begin
+                        end 
+                        
+                        if ((!H_WRITE) && (H_TRANS == NONSEQ))begin
                             //read the data from the specified address in the memory and send it to the Master
-                            H_RDATA <= mem[ADDR_reg[9:2]];
+                            H_RDATA <= mem[H_ADDR[9:2]];
+                        end else if ((!H_WRITE) && (H_TRANS == SEQ)) begin
+                            H_RDATA <= mem[rADDR_reg[9:2]];
                         end
-                        H_RESPONSE <= 1'b0;     //OKAY
+
+                        H_RESPONSE <= 1'b0;     //Address is OKAY
                     end else begin
-                        H_RESPONSE <= 1'b1;     //ERROR
+                        H_RESPONSE <= 1'b1;     //Address has ERROR
                     end  
                 end
 

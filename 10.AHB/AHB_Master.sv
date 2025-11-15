@@ -15,7 +15,7 @@ module AHB_master(
     output logic        H_WRITE,
     output logic        H_MASTLOCK,
     
-    input  logic        H_READY,    // from slave (HREADY)
+    input  logic        H_READY,    // from Slave → MUX → Master
     input  logic [31:0] H_RDATA,
     input  logic        H_RESPONSE,
 

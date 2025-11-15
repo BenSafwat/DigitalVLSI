@@ -28,6 +28,7 @@ module tb_AHB_master;
     H_SIZE_t      CMD_SIZE;
     H_BURST_t     CMD_BURST;
     logic [31:0]  CMD_WDATA;
+    logic [31:0]  CMD_RDATA;
     logic ready,valid;
 
     // Instantiate DUT
@@ -55,6 +56,7 @@ module tb_AHB_master;
         .CMD_SIZE(CMD_SIZE),
         .CMD_BURST(CMD_BURST),
         .CMD_WDATA(CMD_WDATA),
+        .CMD_RDATA(CMD_RDATA),
         .ready(ready),
         .valid(valid)
     );
@@ -103,9 +105,9 @@ module tb_AHB_master;
         @(posedge H_CLK iff ready)
         CMD_WDATA = 32'hCCCC_CCCC;  //#4
 
-        H_READY = 0; //will make ready = 0 too
-        repeat(1) begin @(posedge H_CLK); end
-        H_READY = 1;
+        //H_READY = 0; //will make ready = 0 too
+        //repeat(1) begin @(posedge H_CLK); end
+        //H_READY = 1;
 
         //@(posedge H_CLK iff (busy==0))
         @(posedge H_CLK iff ready)
@@ -125,6 +127,8 @@ module tb_AHB_master;
 
         @(posedge H_CLK iff ready)
         CMD_start = 0;
+        CMD_WRITE = 0;
+
     endtask
 
     task automatic TST_READ();
@@ -196,8 +200,8 @@ module tb_AHB_master;
 
     // Test sequence
     initial begin
-        //TST_WRITE();
-        TST_READ();
+        TST_WRITE();
+        //TST_READ();
     end
 
 endmodule
