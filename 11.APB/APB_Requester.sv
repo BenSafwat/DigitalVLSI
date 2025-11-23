@@ -68,7 +68,7 @@ module apb_requester #(
             SETUP: begin
                 PSEL = 1'b1;
                 PENABLE = 1'b0;
-                req_ready = 1'b0;  //Requester Busy
+                req_ready = 1'b1;  //Ready to accept new request
                 next_state = ACCESS;
             end
 

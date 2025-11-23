@@ -100,53 +100,55 @@ module apb_testbench;
         repeat(2) @(posedge Pclk);
         PRESETn = 1'b1;
         repeat(2) @(posedge Pclk);
-
-        $display("\n--- Test 1: Write Operation ---");
+        
+        $display("--- Test 1: Write Operation ---");
         write_transaction(32'h00000001, 32'hDEADBEEF);
 
-//$stop;
+$stop;
 
-        $display("\n--- Test 2: Read Operation (read back written data) ---");
+        $display("--- Test 2: Read Operation (read back written data) ---");
         read_transaction(32'h00000001);
 
 //$stop;
 
-        $display("\n--- Test 3: Write to Different Address ---");
+        $display("--- Test 3: Write to Different Address ---");
         write_transaction(32'h00000004, 32'hCAFEBABE);
         
 //$stop;
 
-        $display("\n--- Test 4: Read from First Address (verify data) ---");
+        $display("--- Test 4: Read from First Address (verify data) ---");
         read_transaction(32'h00000001);
         
 //$stop;
 
-        $display("\n--- Test 5: Read from Second Address ---");
+        $display("--- Test 5: Read from Second Address ---");
         read_transaction(32'h00000004);
         
 //$stop;
 
-        $display("\n--- Test 6: Write Multiple Sequential Transactions ---");
+        $display("--- Test 6: Write Multiple Sequential Transactions ---");
         for (int i = 0; i < 4; i++) begin
             write_transaction(32'h00000008 + (i * 4), 32'h11111111 * (i + 1));
             //repeat(3) @(posedge Pclk);
         end
 //$stop;
 
-        $display("\n--- Test 7: Read Back Sequential Data ---");
+        $display("--- Test 7: Read Back Sequential Data ---");
         for (int i = 0; i < 4; i++) begin
             read_transaction(32'h00000008 + (i * 4));
             //repeat(3) @(posedge Pclk);
         end
 //$stop;
 
-        $display("\n--- Test 8: Error Test (out of range address) ---");
+        $display("--- Test 8: Error Test (out of range address) ---");
         write_transaction(32'hFFFFFFFF, 32'hDEADBEEF);
         
 //$stop;
 
         repeat(10) @(posedge Pclk);
-        $display("\n=== Testbench Complete ===");
+        $display("=== Testbench Complete ===");
+
+        req_valid = 1'b0; // Indicate requests are NOT valid
 $stop;
         //$finish;
     end
@@ -155,7 +157,7 @@ $stop;
     //                    Task: Write Transaction
     // =====================================================================
     task automatic write_transaction(logic [ADDR_WIDTH-1:0] addr, logic [DATA_WIDTH-1:0] data);
-        $display("  Writing 0x%08h to address 0x%08h", data, addr);
+        $display("  Writing 0x%08h → address 0x%08h", data, addr);
 
         // Wait for requester to be ready
         while (!req_ready) @(posedge Pclk);
@@ -164,15 +166,11 @@ $stop;
         req_addr = addr;
         req_wdata = data;
         req_write = 1'b1;
-        req_valid = 1'b1;
+        req_valid = 1'b1; // Indicate requests are valid
 
-        @(posedge Pclk);
-        req_valid = 1'b0;
-
-        // Wait for completion [return to IDLE]
-        while (!PREADY) @(posedge Pclk);
-        @(posedge Pclk)
-        $display("  Write complete. Error: %b", req_error);
+        // Wait for completion
+        while (!PREADY) @(posedge Pclk); // when PREADY is high, completer indicates complete transaction
+        $display("Write complete. Error: %b", req_error);
     endtask
 
     // =====================================================================
@@ -190,15 +188,11 @@ $stop;
         req_addr = addr;    //assign the address to read
         req_wdata = '0;     //just to make sure to data to write
         req_write = 1'b0;   //Read
-        req_valid = 1'b1;   //data is valid
-
-        @(posedge Pclk);
-        req_valid = 1'b0;   //after one clock period de-assert valid
+        req_valid = 1'b1; // Indicate requests are valid
 
         // Wait for completion and capture data [Return to IDLE]
         while (!PREADY) @(posedge Pclk);
         read_data = req_rdata;
-        @(posedge Pclk);
 
         $display("  Read complete. Data: 0x%08h, Error: %b", read_data, req_error);
     endtask
